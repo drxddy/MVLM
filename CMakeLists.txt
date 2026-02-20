@@ -4,10 +4,25 @@ project(MGPU LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Android-specific settings
+if(MGPU_ANDROID)
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_LIBRARIES "-latomic")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -latomic")
+
+    # Enable FP16 and subgroup extensions
+    add_compile_definitions(
+        MGPU_ANDROID=1
+        __opencl_c_fp16=1
+    )
+endif()
+
 option(MGPU_ANDROID "Build for Android/Adreno targets" OFF)
 
 # --- Compile flags ---
-add_compile_options(-Wall -Wextra -O2)
+if(NOT MGPU_ANDROID)
+    add_compile_options(-Wall -Wextra -O2)
+endif()
 
 # --- Find OpenCL ---
 if(MGPU_ANDROID)
@@ -32,7 +47,6 @@ add_library(mgpu_engine STATIC ${ENGINE_SOURCES})
 target_include_directories(mgpu_engine PUBLIC src)
 if(MGPU_ANDROID)
     target_link_libraries(mgpu_engine PUBLIC OpenCL log)
-    target_compile_definitions(mgpu_engine PUBLIC MGPU_ANDROID=1)
 else()
     target_link_libraries(mgpu_engine PUBLIC OpenCL::OpenCL)
 endif()

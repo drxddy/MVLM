@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MGPU</string>
+    <string name="prompt_hint">Enter prompt...</string>
+    <string name="generate">Generate</string>
+    <string name="clear">Clear</string>
+    <string name="loading">Loading...</string>
+    <string name="error_no_model">No model loaded</string>
+    <string name="error_no_gpu">No GPU available</string>
+    <string name="select_image">Select Image</string>
+    <string name="camera">Camera</string>
+    <string name="result">Result:</string>
+    <string name="latency">Latency:</string>
+    <string name="tokens_per_sec">tokens/sec:</string>
+</resources>
