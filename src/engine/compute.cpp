@@ -509,4 +509,35 @@ cl_event dispatch_patch_embed(const DeviceInfo* dev, cl_program program,
     return event;
 }
 
+// --- Vector Add ---
+
+cl_event dispatch_vector_add(const DeviceInfo* dev, cl_program program,
+                             cl_mem a, cl_mem b, cl_mem output, int n) {
+    cl_int err;
+    cl_kernel kernel = clCreateKernel(program, "vector_add", &err);
+    CL_CHECK_NULL(err);
+
+    err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &a);
+    err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &b);
+    err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &output);
+    err |= clSetKernelArg(kernel, 3, sizeof(int), &n);
+    if (err != CL_SUCCESS) {
+        MGPU_ERR("vector_add: failed to set kernel args (err=%d)\n", err);
+        clReleaseKernel(kernel);
+        return nullptr;
+    }
+
+    const size_t WG_SIZE = 256;
+    size_t num_wis = ((size_t)n + 3) / 4;
+    size_t global[1] = { round_up(num_wis, WG_SIZE) };
+    size_t local[1]  = { WG_SIZE };
+
+    cl_event event;
+    err = clEnqueueNDRangeKernel(dev->queue, kernel, 1, nullptr,
+                                 global, local, 0, nullptr, &event);
+    clReleaseKernel(kernel);
+    CL_CHECK_NULL(err);
+    return event;
+}
+
 } // namespace mgpu

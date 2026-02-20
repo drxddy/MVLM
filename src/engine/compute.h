@@ -104,4 +104,8 @@ cl_event dispatch_patch_embed(const DeviceInfo* dev, cl_program program,
                               int C, int H, int W,
                               int patch_h, int patch_w, int embed_dim);
 
+// Element-wise vector addition: output = a + b
+cl_event dispatch_vector_add(const DeviceInfo* dev, cl_program program,
+                             cl_mem a, cl_mem b, cl_mem output, int n);
+
 } // namespace mgpu

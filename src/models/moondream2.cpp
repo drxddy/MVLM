@@ -1,10 +1,12 @@
 #include "moondream2.h"
+#include "tokenizer.h"
 #include "../engine/compute.h"
 
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 
 namespace mgpu {
 
@@ -291,19 +293,11 @@ bool moondream2_alloc_buffers(Moondream2Model* model, const DeviceInfo* device) 
            model->scratch_gate && model->scratch_up;
 }
 
-// --- Residual Add (simple enqueue) ---
+// --- Residual Add ---
 
-static cl_event dispatch_residual_add(const DeviceInfo* dev, cl_mem a, cl_mem b,
-                                       cl_mem out, int n) {
-    // For now, copy a to out and add b on host — will be replaced with a kernel
-    // TODO: write a simple vector_add kernel and dispatch it
-    // For the initial skeleton, we use clEnqueueCopyBuffer + manual add
-    cl_int err;
-    err = clEnqueueCopyBuffer(dev->queue, a, out, 0, 0, (size_t)n * sizeof(cl_half),
-                              0, nullptr, nullptr);
-    (void)err;
-    (void)b;
-    return nullptr;
+static cl_event dispatch_residual_add(const DeviceInfo* dev, cl_program act_program,
+                                       cl_mem a, cl_mem b, cl_mem out, int n) {
+    return dispatch_vector_add(dev, act_program, a, b, out, n);
 }
 
 // --- KV-cache append ---
@@ -457,8 +451,8 @@ cl_mem moondream2_forward(Moondream2Model* model, const DeviceInfo* device,
         if (ev) { clWaitForEvents(1, &ev); clReleaseEvent(ev); }
 
         // Residual: hidden = hidden + attn_output
-        dispatch_residual_add(device, hidden, residual_buf, hidden,
-                              seq_len * cfg.llm_dim);
+        dispatch_residual_add(device, model->activation_program, hidden, residual_buf, hidden,
+                               seq_len * cfg.llm_dim);
 
         // --- MLP block ---
 
@@ -515,7 +509,7 @@ cl_mem moondream2_forward(Moondream2Model* model, const DeviceInfo* device,
         if (ev) { clWaitForEvents(1, &ev); clReleaseEvent(ev); }
 
         // Residual: hidden = hidden + mlp_output
-        dispatch_residual_add(device, hidden, residual_buf, hidden,
+        dispatch_residual_add(device, model->activation_program, hidden, residual_buf, hidden,
                               seq_len * cfg.llm_dim);
 
         if (layer % 8 == 0 || layer == cfg.llm_layers - 1) {
@@ -552,6 +546,194 @@ cl_mem moondream2_forward(Moondream2Model* model, const DeviceInfo* device,
     printf("[forward] complete, logits ready\n");
     clFinish(device->queue);
     return logits;
+}
+
+// --- Argmax on GPU logits ---
+
+static int argmax_logits(const DeviceInfo* device, cl_mem logits, int vocab_size) {
+    // Read logits back to CPU for argmax
+    // TODO: implement GPU-side argmax kernel
+    cl_half* host_logits = (cl_half*)malloc((size_t)vocab_size * sizeof(cl_half));
+    if (!host_logits) return -1;
+
+    cl_int err = clEnqueueReadBuffer(device->queue, logits, CL_TRUE, 0,
+                                      (size_t)vocab_size * sizeof(cl_half),
+                                      host_logits, 0, nullptr, nullptr);
+    if (err != CL_SUCCESS) {
+        free(host_logits);
+        return -1;
+    }
+
+    // fp16 argmax — convert to float for comparison
+    int best_id = 0;
+    float best_val = -1e30f;
+    for (int i = 0; i < vocab_size; i++) {
+        // Quick fp16→fp32 decode
+        uint16_t h = host_logits[i];
+        uint32_t sign = (h & 0x8000) << 16;
+        uint32_t exp_val = (h >> 10) & 0x1F;
+        uint32_t mant = h & 0x3FF;
+        float val;
+        if (exp_val == 0) {
+            val = 0.0f;
+        } else if (exp_val == 31) {
+            val = (sign ? -1.0f : 1.0f) * 1e30f;
+        } else {
+            uint32_t f32 = sign | ((exp_val - 15 + 127) << 23) | (mant << 13);
+            memcpy(&val, &f32, 4);
+        }
+        if (val > best_val) {
+            best_val = val;
+            best_id = i;
+        }
+    }
+
+    free(host_logits);
+    return best_id;
+}
+
+// --- Text Generation ---
+
+int moondream2_generate(Moondream2Model* model, const DeviceInfo* device,
+                        const char* prompt, int max_new_tokens,
+                        const char* vocab_path) {
+    if (!model->initialized) {
+        fprintf(stderr, "Error: model not initialized\n");
+        return -1;
+    }
+
+    // Load tokenizer
+    TokenizerVocab vocab;
+    memset(&vocab, 0, sizeof(vocab));
+    bool has_tokenizer = false;
+
+    if (vocab_path) {
+        has_tokenizer = tokenizer_load_from_file(&vocab, vocab_path);
+        if (has_tokenizer) {
+            printf("Tokenizer loaded: %d tokens\n", vocab.vocab_size);
+        } else {
+            fprintf(stderr, "Warning: failed to load tokenizer from %s\n", vocab_path);
+        }
+    }
+
+    // Encode prompt
+    int prompt_tokens[2048];
+    int prompt_len = 0;
+
+    if (has_tokenizer && prompt) {
+        prompt_len = tokenizer_encode(&vocab, prompt, prompt_tokens, 2048);
+        printf("Prompt encoded: %d tokens\n", prompt_len);
+    } else if (prompt) {
+        // Fallback: use raw bytes as token IDs (only works for testing)
+        fprintf(stderr, "Warning: no tokenizer — using raw byte encoding\n");
+        const char* p = prompt;
+        while (*p && prompt_len < 2048) {
+            prompt_tokens[prompt_len++] = (unsigned char)*p++;
+        }
+    }
+
+    if (prompt_len == 0) {
+        fprintf(stderr, "Error: empty prompt\n");
+        if (has_tokenizer) tokenizer_free(&vocab);
+        return -1;
+    }
+
+    // Reset KV-cache for fresh generation
+    moondream2_reset_cache(model);
+
+    printf("\n--- Generation ---\n");
+    if (has_tokenizer && prompt) {
+        printf("Prompt: %s\n", prompt);
+    }
+    printf("Output: ");
+    fflush(stdout);
+
+    struct timespec t_start, t_prefill_end;
+    clock_gettime(CLOCK_MONOTONIC, &t_start);
+
+    // Prefill: process all prompt tokens at once
+    cl_mem logits = moondream2_forward(model, device, prompt_tokens, prompt_len);
+    if (!logits) {
+        fprintf(stderr, "Error: prefill forward pass failed\n");
+        if (has_tokenizer) tokenizer_free(&vocab);
+        return -1;
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &t_prefill_end);
+
+    // Decode loop: generate one token at a time
+    int generated = 0;
+    int next_token = argmax_logits(device, logits, model->config.vocab_size);
+    clReleaseMemObject(logits);
+
+    if (next_token < 0) {
+        fprintf(stderr, "Error: argmax failed\n");
+        if (has_tokenizer) tokenizer_free(&vocab);
+        return -1;
+    }
+
+    for (int i = 0; i < max_new_tokens; i++) {
+        // Check for EOS
+        if (has_tokenizer && next_token == vocab.eos_id) {
+            break;
+        }
+
+        // Print the generated token
+        if (has_tokenizer) {
+            const char* tok_str = tokenizer_decode(&vocab, next_token);
+            if (tok_str) {
+                printf("%s", tok_str);
+                fflush(stdout);
+            }
+        } else {
+            if (next_token >= 32 && next_token < 127) {
+                putchar(next_token);
+                fflush(stdout);
+            } else {
+                printf("[%d]", next_token);
+                fflush(stdout);
+            }
+        }
+
+        generated++;
+
+        // Forward pass with single token
+        int token_arr[1] = { next_token };
+        logits = moondream2_forward(model, device, token_arr, 1);
+        if (!logits) {
+            fprintf(stderr, "\nError: decode forward pass failed at token %d\n", i);
+            break;
+        }
+
+        next_token = argmax_logits(device, logits, model->config.vocab_size);
+        clReleaseMemObject(logits);
+
+        if (next_token < 0) {
+            fprintf(stderr, "\nError: argmax failed at token %d\n", i);
+            break;
+        }
+    }
+
+    struct timespec t_end;
+    clock_gettime(CLOCK_MONOTONIC, &t_end);
+
+    double prefill_ms = (t_prefill_end.tv_sec - t_start.tv_sec) * 1000.0 +
+                        (t_prefill_end.tv_nsec - t_start.tv_nsec) / 1e6;
+    double total_ms = (t_end.tv_sec - t_start.tv_sec) * 1000.0 +
+                      (t_end.tv_nsec - t_start.tv_nsec) / 1e6;
+    double decode_ms = total_ms - prefill_ms;
+    double tok_per_sec = (generated > 0) ? (generated / (decode_ms / 1000.0)) : 0.0;
+
+    printf("\n\n--- Stats ---\n");
+    printf("  Prompt tokens:  %d\n", prompt_len);
+    printf("  Generated:      %d tokens\n", generated);
+    printf("  Prefill:        %.1f ms (%.1f ms/token)\n",
+           prefill_ms, prompt_len > 0 ? prefill_ms / prompt_len : 0.0);
+    printf("  Decode:         %.1f ms (%.1f tok/s)\n", decode_ms, tok_per_sec);
+    printf("  Total:          %.1f ms\n", total_ms);
+
+    if (has_tokenizer) tokenizer_free(&vocab);
+    return generated;
 }
 
 // --- Reset ---

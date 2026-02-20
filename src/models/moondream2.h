@@ -114,6 +114,14 @@ bool moondream2_alloc_buffers(Moondream2Model* model, const DeviceInfo* device);
 cl_mem moondream2_forward(Moondream2Model* model, const DeviceInfo* device,
                           const int* tokens, int seq_len);
 
+// Greedy autoregressive text generation
+// Encodes prompt, runs prefill, then decodes token-by-token
+// Prints generated tokens to stdout as they are produced
+// Returns total number of tokens generated (excluding prompt)
+int moondream2_generate(Moondream2Model* model, const DeviceInfo* device,
+                        const char* prompt, int max_new_tokens,
+                        const char* vocab_path);
+
 // Reset KV-cache (for new conversation)
 void moondream2_reset_cache(Moondream2Model* model);
 

@@ -259,3 +259,41 @@ __kernel void silu_gate_multiply(
         }
     }
 }
+
+/* ============================================================================
+ * Vector Add: output = a + b (element-wise)
+ *
+ * Simple element-wise addition of two fp16 vectors.
+ * Used for residual connections in transformer blocks.
+ *
+ * Dispatch: global_work_size = ceil(n / 4) (vectorized, 4 elements per WI)
+ * ========================================================================= */
+__kernel void vector_add(
+    __global const half* restrict a,
+    __global const half* restrict b,
+    __global half* restrict output,
+    const int n)
+{
+    const int gid = get_global_id(0);
+    const int idx = gid << 2;  // gid * 4
+
+    if (idx >= n) return;
+
+    if (idx + 4 <= n) {
+        const half4 va = vload_half4(0, a + idx);
+        const half4 vb = vload_half4(0, b + idx);
+
+        const float4 af = convert_float4(va);
+        const float4 bf = convert_float4(vb);
+        const float4 result = af + bf;
+
+        vstore_half4(result, 0, output + idx);
+    } else {
+        // Scalar tail for non-multiple-of-4 sizes
+        for (int i = idx; i < n; ++i) {
+            const float af = (float)a[i];
+            const float bf = (float)b[i];
+            output[i] = (half)(af + bf);
+        }
+    }
+}

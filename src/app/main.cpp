@@ -2,6 +2,7 @@
 #include "../models/moondream2.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 static void print_usage(const char* program) {
@@ -12,12 +13,14 @@ static void print_usage(const char* program) {
     printf("  --prompt <text>     Text prompt for the model\n");
     printf("  --image <path>      Path to input image\n");
     printf("  --kernels <dir>     Path to OpenCL kernel directory\n");
+    printf("  --vocab <path>      Path to tokenizer vocabulary file\n");
+    printf("  --max-tokens <n>    Maximum tokens to generate (default: 128)\n");
     printf("  --benchmark         Run benchmark mode\n");
     printf("  --help              Show this help message\n");
     printf("\nExamples:\n");
     printf("  %s --benchmark\n", program);
-    printf("  %s --model weights/moondream2-q4_0.gguf --kernels src/kernels\n", program);
-    printf("  %s --model weights/moondream2-q4_0.gguf --image photo.jpg --prompt \"Describe this image\"\n", program);
+    printf("  %s --model weights/moondream2.gguf --kernels src/kernels --prompt \"Hello\"\n", program);
+    printf("  %s --model weights/moondream2.gguf --kernels src/kernels --vocab vocab.txt --prompt \"Describe this image\"\n", program);
 }
 
 int main(int argc, char** argv) {
@@ -25,9 +28,10 @@ int main(int argc, char** argv) {
     const char* prompt = nullptr;
     const char* image_path = nullptr;
     const char* kernel_dir = nullptr;
+    const char* vocab_path = nullptr;
+    int max_tokens = 128;
     bool benchmark = false;
 
-    // Parse command line arguments
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--model") == 0 && i + 1 < argc) {
             model_path = argv[++i];
@@ -37,6 +41,10 @@ int main(int argc, char** argv) {
             image_path = argv[++i];
         } else if (strcmp(argv[i], "--kernels") == 0 && i + 1 < argc) {
             kernel_dir = argv[++i];
+        } else if (strcmp(argv[i], "--vocab") == 0 && i + 1 < argc) {
+            vocab_path = argv[++i];
+        } else if (strcmp(argv[i], "--max-tokens") == 0 && i + 1 < argc) {
+            max_tokens = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--benchmark") == 0) {
             benchmark = true;
         } else if (strcmp(argv[i], "--help") == 0) {
@@ -65,7 +73,7 @@ int main(int argc, char** argv) {
     if (benchmark) {
         printf("\n=== Benchmark Mode ===\n");
         printf("Device initialized successfully.\n");
-        printf("(GEMM benchmarks not yet implemented — see benchmarks/gemm_bench.cpp)\n");
+        printf("Run mgpu_bench for GEMM benchmarks.\n");
         mgpu::destroy_device(&device);
         return 0;
     }
@@ -79,14 +87,16 @@ int main(int argc, char** argv) {
         }
 
         if (prompt) {
-            printf("\nPrompt: %s\n", prompt);
-        }
-        if (image_path) {
-            printf("Image:  %s\n", image_path);
-        }
-
-        if (prompt || image_path) {
-            printf("\n(Inference not yet implemented)\n");
+            int n = mgpu::moondream2_generate(&model, &device, prompt,
+                                               max_tokens, vocab_path);
+            if (n < 0) {
+                fprintf(stderr, "Error: generation failed\n");
+            }
+        } else if (image_path) {
+            printf("Image: %s\n", image_path);
+            printf("(Vision pipeline not yet wired — provide --prompt for text-only generation)\n");
+        } else {
+            printf("Model loaded successfully. Use --prompt to generate text.\n");
         }
 
         mgpu::moondream2_destroy(&model);
