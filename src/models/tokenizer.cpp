@@ -1,4 +1,5 @@
 #include "tokenizer.h"
+#include "gguf_loader.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -48,12 +49,98 @@ static void unescape_token(char* s) {
     *dst = '\0';
 }
 
-// --- Load from GGUF (stub) ---
+// --- Load from GGUF ---
 
-bool tokenizer_load_from_gguf(TokenizerVocab* /*vocab*/, const char* /*gguf_path*/) {
-    fprintf(stderr, "tokenizer: GGUF tokenizer loading not yet implemented — "
-                    "use tokenizer_load_from_file\n");
-    return false;
+// Internal function to load from an already-opened GGUF file
+bool tokenizer_load_from_gguf_file(TokenizerVocab* vocab, const GGUFFile* gguf) {
+    if (!gguf || !gguf->mapped_data) {
+        return false;
+    }
+
+    // Check if tokenizer metadata exists
+    const char** token_strings = nullptr;
+    uint64_t token_count = 0;
+    if (!gguf_get_metadata_string_array(gguf, "tokenizer.ggml.tokens",
+                                        &token_strings, &token_count)) {
+        // Try alternative key names that some GGUF files use
+        if (!gguf_get_metadata_string_array(gguf, "tokenizer.tokens",
+                                            &token_strings, &token_count)) {
+            fprintf(stderr, "tokenizer: no tokenizer.tokens in GGUF\n");
+            return false;
+        }
+    }
+
+    // Load scores (optional, defaults to 0 if not present)
+    const float* scores = nullptr;
+    uint64_t scores_count = 0;
+    gguf_get_metadata_float_array(gguf, "tokenizer.ggml.scores", &scores, &scores_count);
+
+    // Load special token IDs
+    uint32_t bos_id = TOKEN_BOS;
+    uint32_t eos_id = TOKEN_EOS;
+    uint32_t unk_id = TOKEN_UNKNOWN;
+    uint32_t pad_id = TOKEN_PAD;
+
+    gguf_get_metadata_u32(gguf, "tokenizer.ggml.bos_token_id", &bos_id);
+    gguf_get_metadata_u32(gguf, "tokenizer.ggml.eos_token_id", &eos_id);
+    gguf_get_metadata_u32(gguf, "tokenizer.ggml.unk_token_id", &unk_id);
+    gguf_get_metadata_u32(gguf, "tokenizer.ggml.pad_token_id", &pad_id);
+
+    printf("tokenizer: loading %llu tokens from GGUF\n", (unsigned long long)token_count);
+    printf("tokenizer: bos=%u eos=%u unk=%u pad=%u\n", bos_id, eos_id, unk_id, pad_id);
+
+    // Allocate vocab
+    vocab->vocab_size = (int)token_count;
+    vocab->tokens = (char**)calloc(token_count, sizeof(char*));
+    vocab->scores = (float*)calloc(token_count, sizeof(float));
+
+    if (!vocab->tokens || !vocab->scores) {
+        fprintf(stderr, "tokenizer: allocation failed\n");
+        free((void*)token_strings);
+        return false;
+    }
+
+    // Copy token strings (need to duplicate since GGUF memory is const)
+    for (uint64_t i = 0; i < token_count; i++) {
+        vocab->tokens[i] = strndup(token_strings[i], 4096);
+    }
+
+    // Copy scores if available
+    if (scores && scores_count == token_count) {
+        for (uint64_t i = 0; i < token_count; i++) {
+            vocab->scores[i] = scores[i];
+        }
+    } else {
+        // Default scores: higher scores for earlier tokens (simulating BPE merge order)
+        for (uint64_t i = 0; i < token_count; i++) {
+            vocab->scores[i] = (float)(token_count - i);
+        }
+    }
+
+    vocab->bos_id = (int)bos_id;
+    vocab->eos_id = (int)eos_id;
+
+    // Free temporary string array (but not the strings themselves - they're now copied)
+    free((void*)token_strings);
+
+    printf("tokenizer: loaded %d tokens from GGUF\n", vocab->vocab_size);
+    return true;
+}
+
+bool tokenizer_load_from_gguf(TokenizerVocab* vocab, const char* gguf_path) {
+    // Open GGUF file
+    GGUFFile gguf;
+    if (!gguf_open(&gguf, gguf_path)) {
+        fprintf(stderr, "tokenizer: failed to open GGUF file: %s\n", gguf_path);
+        return false;
+    }
+
+    // Print metadata for debugging (optional, can be removed)
+    gguf_print_metadata(&gguf);
+
+    bool result = tokenizer_load_from_gguf_file(vocab, &gguf);
+    gguf_close(&gguf);
+    return result;
 }
 
 // --- Load from text file ---

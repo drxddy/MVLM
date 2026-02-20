@@ -410,4 +410,191 @@ void gguf_print_tensors(const GGUFFile* file) {
            (double)total_size / (1024.0 * 1024.0));
 }
 
+// --- Metadata access implementation ---
+
+// Re-parse metadata section to find specific keys
+// This is called on-demand since we skip metadata during initial load
+static const uint8_t* find_metadata_key(const GGUFFile* file, const char* key,
+                                        GGUFMetadataValueType* out_vtype) {
+    const uint8_t* data = (const uint8_t*)file->mapped_data;
+    const uint8_t* cursor = data + sizeof(GGUFHeader);
+    const uint8_t* end = data + file->file_size;
+
+    for (uint64_t i = 0; i < file->header.metadata_kv_count; i++) {
+        GGUFString key_str;
+        if (!read_gguf_string(&cursor, end, &key_str)) {
+            return nullptr;
+        }
+
+        uint32_t vtype;
+        if (cursor + 4 > end) return nullptr;
+        memcpy(&vtype, cursor, 4);
+        cursor += 4;
+
+        const uint8_t* value_start = cursor;
+
+        if (key_str.len == strlen(key) && memcmp(key_str.data, key, key_str.len) == 0) {
+            *out_vtype = (GGUFMetadataValueType)vtype;
+            return value_start;
+        }
+
+        // Skip the value
+        if (!skip_metadata_value(&cursor, end, (GGUFMetadataValueType)vtype)) {
+            return nullptr;
+        }
+    }
+
+    return nullptr;
+}
+
+bool gguf_get_metadata_u32(const GGUFFile* file, const char* key, uint32_t* out) {
+    GGUFMetadataValueType vtype;
+    const uint8_t* value = find_metadata_key(file, key, &vtype);
+    if (!value) return false;
+
+    if (vtype != GGUFMetadataValueType::UINT32 &&
+        vtype != GGUFMetadataValueType::INT32) {
+        return false;
+    }
+
+    memcpy(out, value, 4);
+    return true;
+}
+
+bool gguf_get_metadata_string(const GGUFFile* file, const char* key,
+                              const char** out, uint64_t* out_len) {
+    GGUFMetadataValueType vtype;
+    const uint8_t* value = find_metadata_key(file, key, &vtype);
+    if (!value) return false;
+
+    if (vtype != GGUFMetadataValueType::STRING) return false;
+
+    GGUFString s;
+    const uint8_t* cursor = value;
+    const uint8_t* end = (const uint8_t*)file->mapped_data + file->file_size;
+    if (!read_gguf_string(&cursor, end, &s)) return false;
+
+    *out = s.data;
+    *out_len = s.len;
+    return true;
+}
+
+bool gguf_get_metadata_string_array(const GGUFFile* file, const char* key,
+                                     const char*** out_strings,
+                                     uint64_t* out_count) {
+    GGUFMetadataValueType vtype;
+    const uint8_t* value = find_metadata_key(file, key, &vtype);
+    if (!value) return false;
+
+    if (vtype != GGUFMetadataValueType::ARRAY) return false;
+
+    const uint8_t* cursor = value;
+    const uint8_t* end = (const uint8_t*)file->mapped_data + file->file_size;
+
+    // Read array type and length
+    uint32_t elem_type;
+    if (cursor + 12 > end) return false;
+    memcpy(&elem_type, cursor, 4);
+    cursor += 4;
+    uint64_t arr_len;
+    memcpy(&arr_len, cursor, 8);
+    cursor += 8;
+
+    if (elem_type != (uint32_t)GGUFMetadataValueType::STRING) {
+        return false;
+    }
+
+    // Allocate temporary array to hold string pointers
+    const char** strings = (const char**)malloc(arr_len * sizeof(const char*));
+    if (!strings) return false;
+
+    for (uint64_t i = 0; i < arr_len; i++) {
+        GGUFString s;
+        if (!read_gguf_string(&cursor, end, &s)) {
+            free(strings);
+            return false;
+        }
+        strings[i] = s.data;
+    }
+
+    *out_strings = strings;
+    *out_count = arr_len;
+    return true;
+}
+
+bool gguf_get_metadata_float_array(const GGUFFile* file, const char* key,
+                                   const float** out_floats,
+                                   uint64_t* out_count) {
+    GGUFMetadataValueType vtype;
+    const uint8_t* value = find_metadata_key(file, key, &vtype);
+    if (!value) return false;
+
+    if (vtype != GGUFMetadataValueType::ARRAY) return false;
+
+    const uint8_t* cursor = value;
+    const uint8_t* end = (const uint8_t*)file->mapped_data + file->file_size;
+
+    // Read array type and length
+    uint32_t elem_type;
+    if (cursor + 12 > end) return false;
+    memcpy(&elem_type, cursor, 4);
+    cursor += 4;
+    uint64_t arr_len;
+    memcpy(&arr_len, cursor, 8);
+    cursor += 8;
+
+    if (elem_type != (uint32_t)GGUFMetadataValueType::FLOAT32) {
+        return false;
+    }
+
+    if (cursor + arr_len * 4 > end) return false;
+
+    *out_floats = (const float*)cursor;
+    *out_count = arr_len;
+    return true;
+}
+
+void gguf_print_metadata(const GGUFFile* file) {
+    printf("\nGGUF Metadata (%llu keys):\n",
+           (unsigned long long)file->header.metadata_kv_count);
+
+    const uint8_t* data = (const uint8_t*)file->mapped_data;
+    const uint8_t* cursor = data + sizeof(GGUFHeader);
+    const uint8_t* end = data + file->file_size;
+
+    for (uint64_t i = 0; i < file->header.metadata_kv_count; i++) {
+        GGUFString key;
+        if (!read_gguf_string(&cursor, end, &key)) break;
+
+        uint32_t vtype;
+        if (cursor + 4 > end) break;
+        memcpy(&vtype, cursor, 4);
+        cursor += 4;
+
+        const char* type_name = "?";
+        switch ((GGUFMetadataValueType)vtype) {
+            case GGUFMetadataValueType::UINT8: type_name = "uint8"; break;
+            case GGUFMetadataValueType::INT8: type_name = "int8"; break;
+            case GGUFMetadataValueType::UINT16: type_name = "uint16"; break;
+            case GGUFMetadataValueType::INT16: type_name = "int16"; break;
+            case GGUFMetadataValueType::UINT32: type_name = "uint32"; break;
+            case GGUFMetadataValueType::INT32: type_name = "int32"; break;
+            case GGUFMetadataValueType::FLOAT32: type_name = "float32"; break;
+            case GGUFMetadataValueType::BOOL: type_name = "bool"; break;
+            case GGUFMetadataValueType::STRING: type_name = "string"; break;
+            case GGUFMetadataValueType::ARRAY: type_name = "array"; break;
+            case GGUFMetadataValueType::UINT64: type_name = "uint64"; break;
+            case GGUFMetadataValueType::INT64: type_name = "int64"; break;
+            case GGUFMetadataValueType::FLOAT64: type_name = "float64"; break;
+            default: type_name = "unknown"; break;
+        }
+
+        printf("  %.*s : %s\n", (int)key.len, key.data, type_name);
+
+        if (!skip_metadata_value(&cursor, end, (GGUFMetadataValueType)vtype)) {
+            break;
+        }
+    }
+}
+
 } // namespace mgpu

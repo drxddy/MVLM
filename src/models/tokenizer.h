@@ -3,6 +3,9 @@
 #include <cstdint>
 #include <cstddef>
 
+// Forward declaration for GGUFFile
+struct GGUFFile;
+
 namespace mgpu {
 
 // Special token IDs for Phi-1.5 / Moondream2
@@ -25,7 +28,11 @@ struct TokenizerVocab {
 //   tokenizer.ggml.scores (float array)
 //   tokenizer.ggml.bos_token_id (uint32)
 //   tokenizer.ggml.eos_token_id (uint32)
+// If gguf_path is nullptr, uses the pre-loaded GGUF file (for internal use)
 bool tokenizer_load_from_gguf(TokenizerVocab* vocab, const char* gguf_path);
+
+// Load tokenizer from an already-opened GGUF file (internal use)
+bool tokenizer_load_from_gguf_file(TokenizerVocab* vocab, const GGUFFile* gguf);
 
 // Load vocabulary from a simple text file (one token per line)
 // Format: "token_string score" per line (tab or space separated)

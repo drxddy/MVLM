@@ -607,13 +607,27 @@ int moondream2_generate(Moondream2Model* model, const DeviceInfo* device,
     memset(&vocab, 0, sizeof(vocab));
     bool has_tokenizer = false;
 
-    if (vocab_path) {
+    // First try: load from GGUF metadata (if model is loaded)
+    if (model->weights.mapped_data) {
+        has_tokenizer = tokenizer_load_from_gguf_file(&vocab, &model->weights);
+        if (has_tokenizer) {
+            printf("Tokenizer loaded from GGUF: %d tokens\n", vocab.vocab_size);
+        }
+    }
+
+    // Second try: load from separate vocab file (fallback)
+    if (!has_tokenizer && vocab_path) {
         has_tokenizer = tokenizer_load_from_file(&vocab, vocab_path);
         if (has_tokenizer) {
-            printf("Tokenizer loaded: %d tokens\n", vocab.vocab_size);
+            printf("Tokenizer loaded from file: %d tokens\n", vocab.vocab_size);
         } else {
             fprintf(stderr, "Warning: failed to load tokenizer from %s\n", vocab_path);
         }
+    }
+
+    // Final fallback: no tokenizer available
+    if (!has_tokenizer) {
+        fprintf(stderr, "Warning: no tokenizer available, using raw byte encoding\n");
     }
 
     // Encode prompt

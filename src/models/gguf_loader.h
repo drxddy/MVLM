@@ -87,4 +87,30 @@ void gguf_close(GGUFFile* file);
 // Print all tensor names, shapes, types
 void gguf_print_tensors(const GGUFFile* file);
 
+// --- Metadata access functions ---
+
+// Read a uint32 metadata value by key name (e.g., "tokenizer.ggml.bos_token_id")
+// Returns true if found and value stored in *out
+bool gguf_get_metadata_u32(const GGUFFile* file, const char* key, uint32_t* out);
+
+// Read a string metadata value by key name
+// Returns true if found, string stored in *out (points into mmap'd region)
+bool gguf_get_metadata_string(const GGUFFile* file, const char* key,
+                              const char** out, uint64_t* out_len);
+
+// Read a string array metadata value by key name
+// Returns true if found, array data stored in pointers (point into mmap'd region)
+bool gguf_get_metadata_string_array(const GGUFFile* file, const char* key,
+                                     const char*** out_strings,
+                                     uint64_t* out_count);
+
+// Read a float array metadata value by key name
+// Returns true if found, data stored in pointer (points into mmap'd region)
+bool gguf_get_metadata_float_array(const GGUFFile* file, const char* key,
+                                   const float** out_floats,
+                                   uint64_t* out_count);
+
+// Print all metadata keys (useful for debugging)
+void gguf_print_metadata(const GGUFFile* file);
+
 } // namespace mgpu
