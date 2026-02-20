@@ -102,7 +102,13 @@ inline bool create_test_gguf_file(const std::string& path) {
 
     // Write minimal header (version 3, 0 tensors, 0 metadata)
     builder.write_header(3, 0, 0);
+
+    // Pad to alignment (needed even with 0 tensors)
     builder.pad_alignment();
+
+    // Add at least 32 bytes of dummy data so file is valid
+    uint8_t dummy[32] = {0};
+    builder.data.insert(builder.data.end(), dummy, dummy + 32);
 
     return builder.save_to_file(path);
 }
@@ -157,8 +163,10 @@ inline bool create_tokenizer_test_gguf_v2(const std::string& path) {
     uint64_t dims[2] = {10, 20};
     builder.write_tensor("model.embed_tokens.weight", 2, dims, 1, 0);
 
+    // Pad to alignment
     builder.pad_alignment();
 
+    // Write tensor data (offset 0 = start of data section after alignment)
     uint8_t dummy_data[400] = {0};
     builder.data.insert(builder.data.end(), dummy_data, dummy_data + 400);
 

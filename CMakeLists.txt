@@ -52,3 +52,42 @@ target_link_libraries(mgpu_bench PRIVATE mgpu_engine)
 # --- Install OpenCL kernel files ---
 file(GLOB KERNEL_FILES src/kernels/*.cl)
 install(FILES ${KERNEL_FILES} DESTINATION share/mgpu/kernels)
+
+# --- Tests ---
+option(MGPU_BUILD_TESTS "Build unit tests" ON)
+
+if(MGPU_BUILD_TESTS)
+    # Try to find GTest
+    find_package(GTest QUIET)
+
+    if(NOT GTest_FOUND)
+        # Use FetchContent to get GTest
+        include(FetchContent)
+        FetchContent_Declare(
+            googletest
+            GIT_REPOSITORY https://github.com/google/googletest.git
+            GIT_TAG v1.14.0
+        )
+        set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(googletest)
+    endif()
+
+    # Unit tests (no GPU required)
+    add_executable(test_gguf tests/test_gguf.cpp tests/test_utils.h)
+    target_link_libraries(test_gguf PRIVATE mgpu_engine GTest::gtest GTest::gtest_main)
+    target_include_directories(test_gguf PRIVATE tests)
+
+    add_executable(test_tokenizer tests/test_tokenizer.cpp tests/test_utils.h)
+    target_link_libraries(test_tokenizer PRIVATE mgpu_engine GTest::gtest GTest::gtest_main)
+    target_include_directories(test_tokenizer PRIVATE tests)
+
+    # Integration tests (require GPU)
+    add_executable(test_device tests/test_device.cpp)
+    target_link_libraries(test_device PRIVATE mgpu_engine GTest::gtest GTest::gtest_main)
+
+    # Add all tests to CTest
+    enable_testing()
+    add_test(NAME GGUFTest COMMAND test_gguf)
+    add_test(NAME TokenizerTest COMMAND test_tokenizer)
+    add_test(NAME DeviceTest COMMAND test_device)
+endif()
