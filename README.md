@@ -1,9 +1,6 @@
 
 ## MVLM: Real-Time VLM on Mobile via Custom OpenCL Inference Engine
 
-**Status:** Phase 5 Complete (End-to-End Pipeline)
-**Date:** February 2026
-**Target:** Snapdragon 8 Gen 3 / 8 Elite (Adreno A7x GPUs)
 
 ---
 
