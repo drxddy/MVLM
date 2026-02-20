@@ -1,6 +1,5 @@
-# MGPU: On-Device Vision-Language Model Inference Engine for Adreno GPUs
 
-## Project: Real-Time VLM on Mobile via Custom OpenCL Inference Engine
+## MVLM: Real-Time VLM on Mobile via Custom OpenCL Inference Engine
 
 **Status:** Phase 5 Complete (End-to-End Pipeline)
 **Date:** February 2026
