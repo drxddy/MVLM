@@ -15,21 +15,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var loadingIndicator: ProgressBar
     private lateinit var latencyText: TextView
 
-    // Native library interface
-    external fun loadModel(modelPath: String, kernelDir: String): Boolean
-    external fun generateText(prompt: String, maxTokens: Int): String
-    external fun getDeviceInfo(): String
-    external fun unloadModel()
-
     companion object {
         init {
             System.loadLibrary("mgpu")
         }
     }
 
-    override fun
-        }
-    onCreate(savedInstanceState: Bundle?) {
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
@@ -108,11 +100,14 @@ class MainActivity : AppCompatActivity() {
             // Also copy kernel files
             val kernelDir = File(filesDir, "kernels")
             kernelDir.mkdirs()
-            assets.open("kernels").use { input ->
-                // Copy all kernel files
-            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
+
+    // Native library interface
+    external fun loadModel(modelPath: String, kernelDir: String): Boolean
+    external fun generateText(prompt: String, maxTokens: Int): String
+    external fun getDeviceInfo(): String
+    external fun unloadModel()
 }

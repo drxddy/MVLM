@@ -1,0 +1,46 @@
+{
+  "buildFiles": [
+    "/Users/dhikshithreddy/Developer/MGPU/android/app/src/main/cpp/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/Users/dhikshithreddy/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/Users/dhikshithreddy/Developer/MGPU/android/app/.cxx/Debug/246m2n5u/arm64-v8a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/Users/dhikshithreddy/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/Users/dhikshithreddy/Developer/MGPU/android/app/.cxx/Debug/246m2n5u/arm64-v8a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "mgpu::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "mgpu",
+      "output": "/Users/dhikshithreddy/Developer/MGPU/android/app/build/intermediates/cxx/Debug/246m2n5u/obj/arm64-v8a/libmgpu.so",
+      "runtimeFiles": [
+        "/Users/dhikshithreddy/Developer/MGPU/third_party/OpenCL-ICD-Loader/build/libOpenCL.so"
+      ]
+    },
+    "mgpu_engine::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "mgpu_engine",
+      "output": "/Users/dhikshithreddy/Developer/MGPU/android/app/.cxx/Debug/246m2n5u/arm64-v8a/libmgpu_engine.a"
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "/Users/dhikshithreddy/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang.lld",
+      "cppCompilerExecutable": "/Users/dhikshithreddy/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++.lld"
+    }
+  },
+  "cFileExtensions": [],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}

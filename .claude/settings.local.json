@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(./gradlew:*)",
+      "Bash(curl:*)",
+      "Bash(git clone:*)",
+      "Bash(./scripts/build_android.sh:*)"
     ]
   }
 }

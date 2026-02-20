@@ -1,0 +1,24 @@
+# ninja log v5
+2	345	1771630681664019996	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/models/gguf_loader.cpp.o	61395cd0ff812d19
+0	337	1771630681652533199	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/engine/device.cpp.o	29ada5eb78e9c7a7
+3	451	1771630681769540256	CMakeFiles/mgpu.dir/jni_wrapper.cpp.o	6c7b14d0a18766e9
+0	6	0	clean	d985c66c9c9c8aa3
+3	332	1771630681649946447	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/models/tokenizer.cpp.o	156e860e70efa3f
+0	61	1771630781734705253	build.ninja	4e80c224bebe60e7
+1	246	1771630681563455197	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/engine/pipeline.cpp.o	afb535f65d4eca9b
+3	355	1771630681673861876	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/models/moondream2.cpp.o	3459a027f22080c9
+1	325	1771630681640173401	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/engine/memory.cpp.o	164037764f60a635
+1	337	1771630681652740491	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/engine/compute.cpp.o	c4a0624a0526fceb
+1	322	1771630681640212484	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/engine/profiler.cpp.o	248a74b44b0b8745
+355	403	1771630681723692000	libmgpu_engine.a	d8e82b1f1a82edd1
+2	282	1771630782048439990	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/engine/pipeline.cpp.o	afb535f65d4eca9b
+2	347	1771630782116985357	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/engine/profiler.cpp.o	248a74b44b0b8745
+1	350	1771630782118836692	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/engine/memory.cpp.o	164037764f60a635
+1	359	1771630782129691572	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/engine/compute.cpp.o	c4a0624a0526fceb
+1	361	1771630782130716072	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/engine/device.cpp.o	29ada5eb78e9c7a7
+2	365	1771630782134810658	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/models/tokenizer.cpp.o	156e860e70efa3f
+2	374	1771630782145810663	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/models/gguf_loader.cpp.o	61395cd0ff812d19
+2	381	1771630782152325625	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/models/moondream2.cpp.o	3459a027f22080c9
+381	430	1771630782202708000	libmgpu_engine.a	d8e82b1f1a82edd1
+3	480	1771630782250690006	CMakeFiles/mgpu.dir/jni_wrapper.cpp.o	6c7b14d0a18766e9
+480	586	1771630782353693723	/Users/dhikshithreddy/Developer/MGPU/android/app/build/intermediates/cxx/Debug/246m2n5u/obj/arm64-v8a/libmgpu.so	1534db5ec84626eb
