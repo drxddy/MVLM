@@ -46,13 +46,45 @@ struct TransformerLayerWeights {
     cl_mem post_norm_weight;   // buffer: [dim]
 };
 
+// Vision encoder layer weights (SigLIP)
+struct VisionLayerWeights {
+    cl_mem patch_embed_weight;     // image2d: [patch_dim, hidden_dim]
+    cl_mem patch_embed_bias;       // buffer: [hidden_dim]
+
+    cl_mem attn_q_weight;          // image2d: [hidden_dim, hidden_dim]
+    cl_mem attn_k_weight;          // image2d: [hidden_dim, hidden_dim]
+    cl_mem attn_v_weight;          // image2d: [hidden_dim, hidden_dim]
+    cl_mem attn_o_weight;          // image2d: [hidden_dim, hidden_dim]
+
+    cl_mem mlp_fc_weight;          // image2d: [hidden_dim, mlp_hidden]
+    cl_mem mlp_fc_bias;            // buffer: [mlp_hidden]
+    cl_mem mlp_proj_weight;         // image2d: [mlp_hidden, hidden_dim]
+    cl_mem mlp_proj_bias;           // buffer: [hidden_dim]
+
+    cl_mem norm1_weight;           // buffer: [hidden_dim]
+    cl_mem norm2_weight;           // buffer: [hidden_dim]
+};
+
 struct Moondream2Weights {
+    // Language model weights
     cl_mem token_embed;        // buffer: [vocab_size, dim]
     cl_mem final_norm_weight;  // buffer: [dim]
     cl_mem lm_head_weight;     // image2d: [dim, vocab_size]
 
     TransformerLayerWeights* layers;
     int num_layers;
+
+    // Vision encoder weights
+    VisionLayerWeights* vision_layers;
+    int num_vision_layers;
+
+    cl_mem vision_patch_embed_weight;  // image2d: [patch_dim, vision_dim]
+    cl_mem vision_patch_embed_bias;    // buffer: [vision_dim]
+
+    cl_mem vision_norm_weight;        // buffer: [vision_dim]
+
+    // Vision-to-language projection
+    cl_mem vision_proj_weight;        // image2d: [vision_dim, llm_dim]
 
     // RoPE tables
     cl_mem cos_table;          // buffer: [max_seq_len, head_dim/2]
@@ -109,6 +141,22 @@ bool moondream2_init_rope(Moondream2Model* model, const DeviceInfo* device);
 
 // Allocate KV-cache and scratch buffers
 bool moondream2_alloc_buffers(Moondream2Model* model, const DeviceInfo* device);
+
+// ============================================================================
+// Vision Encoder (SigLIP)
+// ============================================================================
+
+// Process image through vision encoder, returns visual tokens [num_patches, vision_dim]
+// image: Input image buffer (RGB float32, normalized)
+// output: Output visual tokens [num_patches, vision_dim]
+cl_mem moondream2_encode_vision(Moondream2Model* model, const DeviceInfo* device,
+                                cl_mem image, int image_width, int image_height);
+
+// Run combined vision + text forward pass
+// If image is provided, encodes vision first, prepends to text tokens
+cl_mem moondream2_forward_vision(Moondream2Model* model, const DeviceInfo* device,
+                                  const int* text_tokens, int text_len,
+                                  cl_mem visual_tokens, int num_visual_tokens);
 
 // Run the full LLM forward pass, returns logits buffer [vocab_size]
 cl_mem moondream2_forward(Moondream2Model* model, const DeviceInfo* device,

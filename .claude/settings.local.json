@@ -5,7 +5,11 @@
       "Bash(./gradlew:*)",
       "Bash(curl:*)",
       "Bash(git clone:*)",
-      "Bash(./scripts/build_android.sh:*)"
+      "Bash(./scripts/build_android.sh:*)",
+      "Bash(cmake:*)",
+      "Bash(make:*)",
+      "Bash(export:*)",
+      "Bash(./test_gguf:*)"
     ]
   }
 }

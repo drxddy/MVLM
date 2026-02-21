@@ -2,9 +2,6 @@ build/
 weights/
 third_party/
 
-PLAN.md
-qualcom.md
-
 *.o
 *.so
 *.a

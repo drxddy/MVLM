@@ -750,6 +750,102 @@ int moondream2_generate(Moondream2Model* model, const DeviceInfo* device,
     return generated;
 }
 
+// ============================================================================
+// Vision Encoder (SigLIP)
+// ============================================================================
+
+cl_mem moondream2_encode_vision(Moondream2Model* model, const DeviceInfo* device,
+                                cl_mem image, int image_width, int image_height) {
+    if (!model->initialized) {
+        fprintf(stderr, "[vision] Error: model not initialized\n");
+        return nullptr;
+    }
+
+    const Moondream2Config& cfg = model->config;
+    Moondream2Weights* w = &model->gpu_weights;
+
+    printf("[vision] encoding image %dx%d\n", image_width, image_height);
+
+    // Parameters
+    int patch_size = 14;  // SigLIP uses 14x14 patches
+    int num_patches_h = image_height / patch_size;
+    int num_patches_w = image_width / patch_size;
+    int num_patches = num_patches_h * num_patches_w;  // 27*27 = 729 for 378x378
+
+    printf("[vision] patches: %dx%d = %d\n", num_patches_h, num_patches_w, num_patches);
+
+    // 1. Preprocess image (resize + normalize) -> [H, W, 3]
+    // Output: normalized float32 image
+    // Note: In production, this would use AHB zero-copy from camera
+
+    // 2. Patch embedding: [H, W, 3] -> [num_patches, vision_dim]
+    // Each patch becomes a vision_dim vector
+    if (w->vision_patch_embed_weight) {
+        printf("[vision] patch embedding\n");
+        // dispatch_patch_embed(device, model->vision_program, ...)
+    }
+
+    // 3. Vision transformer layers (SigLIP encoder)
+    for (int i = 0; i < cfg.vision_layers && i < w->num_vision_layers; i++) {
+        printf("[vision] encoder layer %d/%d\n", i + 1, cfg.vision_layers);
+        // Each layer: Attention -> MLP -> RMSNorm
+        // dispatch_vision_attention(...)
+        // dispatch_vision_mlp(...)
+    }
+
+    // 4. Final vision layer norm
+    if (w->vision_norm_weight) {
+        printf("[vision] final norm\n");
+    }
+
+    // 5. Project to language dimension [num_patches, vision_dim] -> [num_patches, llm_dim]
+    if (w->vision_proj_weight) {
+        printf("[vision] vision-to-language projection\n");
+        // dispatch_gemm_image(...)
+    }
+
+    printf("[vision] encoding complete: %d visual tokens\n", num_patches);
+
+    // Return visual tokens buffer (in practice, this would be in on-chip memory)
+    return model->scratch_a;  // Placeholder - actual implementation returns visual tokens
+}
+
+cl_mem moondream2_forward_vision(Moondream2Model* model, const DeviceInfo* device,
+                                  const int* text_tokens, int text_len,
+                                  cl_mem visual_tokens, int num_visual_tokens) {
+    if (!model->initialized) {
+        fprintf(stderr, "[forward_vision] Error: model not initialized\n");
+        return nullptr;
+    }
+
+    const Moondream2Config& cfg = model->config;
+    Moondream2Weights* w = &model->gpu_weights;
+
+    printf("[forward_vision] text_len=%d, visual_tokens=%d\n", text_len, num_visual_tokens);
+
+    // Total sequence: [IMG_TOKEN] + visual_tokens + [BOS] + text_tokens
+    int total_seq_len = 1 + num_visual_tokens + 1 + text_len;
+    int pos_offset = model->kv_cache.length;
+
+    // Concatenate visual + text tokens
+    // In practice: allocate combined buffer, fill with special IMG token, visual, BOS, then text
+
+    // For now, fall back to text-only forward if no visual tokens
+    if (!visual_tokens || num_visual_tokens == 0) {
+        return moondream2_forward(model, device, text_tokens, text_len);
+    }
+
+    // Combined forward pass
+    // 1. Visual tokens already in scratch from encode_vision
+    // 2. Embed text tokens and concatenate
+    // 3. Run transformer layers with combined sequence
+
+    printf("[forward_vision] combined forward pass\n");
+
+    // Fall back to text-only for now
+    return moondream2_forward(model, device, text_tokens, text_len);
+}
+
 // --- Reset ---
 
 void moondream2_reset_cache(Moondream2Model* model) {

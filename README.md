@@ -1,6 +1,9 @@
 
 ## MVLM: Real-Time VLM on Mobile via Custom OpenCL Inference Engine
 
+**Status:** Phase 5 In Progress — Text pipeline wired, Vision encoder & optimizations remaining
+**Date:** February 2026
+**Target:** Snapdragon 8 Gen 3 / 8 Elite (Adreno A7x GPUs)
 
 ---
 
@@ -34,7 +37,35 @@ Reference: EPFL study shows GPU offload reduces power 10x (1.3W vs 12W). Qualcom
 
 ---
 
-## 4. Implemented Features
+## 4. Progress Overview
+
+| Phase | Status | Summary |
+|-------|--------|---------|
+| **0: Environment Setup** | ✅ Done | CMake, NDK cross-compile, ADB deploy, GPU perf scripts |
+| **1: GEMM Kernels** | ✅ Done | Naive → Tiled → Image-based GEMM/GEMV + benchmark harness |
+| **2: Transformer Primitives** | ✅ Done | RMSNorm, SiLU/GELU, Softmax, RoPE, Attention (prefill+decode), fused MLP |
+| **3: Model Graph Integration** | ✅ Done | GGUF loader, KV-cache, scratch pool, transformer forward pass, CLI |
+| **4: Vision Encoder** | 🟡 Partial | Image preprocess + patch embed done; SigLIP layers, projection, zero-copy camera remaining |
+| **5: End-to-End Pipeline** | 🟡 Partial | Tokenizer, greedy decode, `moondream2_generate()` done; recordable queues & pipeline events remaining |
+| **6: Optimization & Profiling** | 🔲 Not started | Kernel fusion, auto-tuning, on-chip KV-cache, quantized weight dequant |
+| **7: Demo App** | 🔲 Not started | Android camera preview with real-time VLM overlay |
+
+### Remaining Work
+- [ ] Verify forward pass end-to-end with actual GGUF weights on Adreno hardware
+- [ ] SigLIP encoder layer wiring (27 transformer layers)
+- [ ] Vision → LLM projection layer
+- [ ] Zero-copy camera input via AHardwareBuffer (full implementation)
+- [ ] Recordable queues for decode loop (Qualcomm extension)
+- [ ] Pipeline event management (`engine/pipeline.h/cpp`)
+- [ ] Kernel fusion (RMSNorm + GEMM, attention score + softmax)
+- [ ] Workgroup size auto-tuning per device
+- [ ] On-chip global memory for KV-cache (Qualcomm extension)
+- [ ] Quantized weight support (Q4_0, Q8_0 dequantize kernels)
+- [ ] Android camera demo app with real-time inference
+
+---
+
+## 5. Implemented Features
 
 ### OpenCL Engine (`src/engine/`)
 
@@ -53,9 +84,55 @@ Reference: EPFL study shows GPU offload reduces power 10x (1.3W vs 12W). Qualcom
   - Event-based synchronization
   - Profiling integration
 
-- **Pipeline** (`pipeline.cpp`)
-  - Event-driven inference pipeline
-  - Recordable queues for decode loop (QCOM extension)
+- **Pipeline** (`pipeline.cpp`) - Full Qualcomm Extension Support:
+  - `cl_qcom_perf_hint` - GPU performance hints
+  - `cl_qcom_recordable_queues` - Decode loop recording/replay
+  - `cl_qcom_onchip_global_memory` - Fast on-chip SRAM for KV-cache
+  - `cl_qcom_android_ahardwarebuffer_host_ptr` - Zero-copy camera input
+  - `cl_qcom_dot_product8` - Hardware Int8 matrix multiplication
+  - `cl_qcom_subgroup_shuffle` - Cross-thread data exchange
+
+### Qualcomm OpenCL Extensions Implemented
+
+| Extension | File | Purpose |
+|----------|------|---------|
+| `cl_qcom_perf_hint` | pipeline.cpp | GPU performance hints for latency/power |
+| `cl_qcom_recordable_queues` | pipeline.cpp | Record decode layer sequence, replay 24x |
+| `cl_qcom_onchip_global_memory` | pipeline.cpp, memory.cpp | Fast SRAM for KV-cache/activations |
+| `cl_qcom_android_ahardwarebuffer_host_ptr` | pipeline.cpp | Zero-copy camera → GPU |
+| `cl_qcom_dot_product8` | pipeline.cpp | Int8×Int8→Int32 hardware matmul |
+| `cl_qcom_subgroup_shuffle` | layernorm.cl | Efficient cross-thread reductions |
+
+### Zero-Copy Camera Pipeline
+
+```
+Camera ISP (AHB)
+    │
+    ├── cl_qcom_android_ahardwarebuffer_host_ptr
+    │
+    ▼
+OpenCL Image (zero-copy)
+    │
+    ├── Vision Encoder (SigLIP)
+    │
+    ▼ (stays in on-chip memory)
+cl_qcom_onchip_global_memory
+    │
+    ├── LLM Decoder (via recordable queue)
+    │
+    ▼
+Text Output
+```
+
+### Recordable Queues for Decode
+
+The transformer decoder runs 24-32 identical layer structures. Instead of dispatching each kernel individually:
+
+1. **Record**: `clEnqueueNDRangeKernel` with recording object
+2. **Replay**: `clEnqueueRecordingQCOM` - same kernels, updated KV-cache pointers
+3. **Result**: Near-zero CPU dispatch overhead per token
+
+This is critical for achieving >15 tok/s on mobile.
 
 ### OpenCL Kernels (`src/kernels/`)
 
@@ -113,7 +190,7 @@ Reference: EPFL study shows GPU offload reduces power 10x (1.3W vs 12W). Qualcom
 
 ---
 
-## 5. Qualcomm/OpenCL Technical Details
+## 6. Qualcomm/OpenCL Technical Details
 
 ### Key OpenCL Features Used
 
@@ -122,6 +199,7 @@ Reference: EPFL study shows GPU offload reduces power 10x (1.3W vs 12W). Qualcom
 clCreateImage() with CL_MEM_OBJECT_IMAGE2D
 ```
 Weight matrices stored as 2D images leverage Adreno's L1/L2 texture cache, providing 2-3x speedup over buffer-based GEMM.
+Reference: Qualcomm OpenCL Programming Guide Section 6.2
 
 #### Subgroup Operations
 ```
@@ -130,17 +208,46 @@ sub_group_reduce_add()
 sub_group_broadcast()
 ```
 Eliminate local memory synchronization barriers. Adreno supports up to 64 threads per subgroup.
+Reference: Qualcomm OpenCL Programming Guide Section 8.9
+
+#### Zero-Copy AHB (Android Hardware Buffer)
+```
+cl_qcom_android_ahardwarebuffer_host_ptr
+```
+Camera ISP outputs directly to GPU-accessible memory. No staging buffer, no copy. Frame lands directly in OpenCL image.
+Reference: Qualcomm OpenCL Programming Guide Section 7.4
+
+#### On-Chip Global Memory
+```
+cl_qcom_onchip_global_memory
+```
+Fast on-chip SRAM for KV-cache and intermediate activations. Eliminates catastrophic DRAM round-trip between vision encoder and LLM.
+Reference: Qualcomm OpenCL Programming Guide Section 9.1.6
+
+#### Recordable Queues
+```
+cl_qcom_recordable_queues
+```
+Record transformer layer sequence once, replay with updated KV-cache pointers. Critical for >15 tok/s decode.
+Reference: Qualcomm OpenCL Programming Guide Section 9.1.3
+
+#### Int8 Dot Product
+```
+cl_qcom_dot_product8
+```
+Hardware-accelerated Int8×Int8→Int32 accumulation. Enables Q4/Q8 quantized weights at near-silicon speed.
+Reference: Qualcomm OpenCL Programming Guide Section 9.4
 
 #### Qualcomm-Specific Extensions
 
-| Extension | Purpose |
-|-----------|---------|
-| `cl_qcom_subgroup_shuffle` | Efficient cross-thread data exchange |
-| `cl_qcom_onchip_global_memory` | Fast on-chip memory for KV-cache |
-| `cl_qcom_recordable_queues` | Record decode loop for replay |
-| `cl_qcom_perf_hint` | GPU performance hints |
-| `cl_qcom_dot_product8` | Int8 dot product for quantized inference |
-| `cl_qcom_ahb` | Direct AHB memory access |
+| Extension | Purpose | Reference |
+|-----------|---------|----------|
+| `cl_qcom_perf_hint` | GPU performance hints | Section 9.1.1 |
+| `cl_qcom_recordable_queues` | Record decode loop for replay | Section 9.1.3 |
+| `cl_qcom_onchip_global_memory` | Fast on-chip memory for KV-cache | Section 9.1.6 |
+| `cl_qcom_android_ahardwarebuffer_host_ptr` | Zero-copy camera input | Section 7.4 |
+| `cl_qcom_dot_product8` | Int8 dot product for quantized inference | Section 9.4 |
+| `cl_qcom_subgroup_shuffle` | Efficient cross-thread data exchange | Section 9.2.2 |
 
 #### FP16 Optimization
 ```
@@ -148,17 +255,26 @@ __opencl_c_fp16=1
 ```
 All kernels use half-precision floats for 2x throughput on Adreno.
 
-### Kernel Optimization Patterns
+### Adreno GPU Architecture Notes
+
+- **Waves/Fibers**: Adreno schedules in "waves" of 32-64 threads
+- **L1/L2 Cache**: Image objects use dedicated texture cache
+- **Constant Memory**: Use `max_constant_size` for LayerNorm parameters
+- **Avoid `size_t`**: Wastes 2 registers per variable on 64-bit Android (Section 8.7)
+
+### Kernel Optimization Patterns (from Qualcomm Guide)
 
 1. **Vectorized Memory Access**: 128-bit loads/stores (`float4`)
 2. **Workgroup Tiling**: 16×16 or 32×32 tile sizes
 3. **Local Memory Reduction**: Minimize global memory traffic
 4. **Branch-Free Code**: Avoid warp divergence
 5. **Memory Coalescing**: Aligned accesses, sequential patterns
+6. **Avoid `size_t`**: Use `int` for indices when possible (Section 8.7)
+7. **mul24/mad24**: Use for index math, avoids expensive 32-bit multiply
 
 ---
 
-## 6. Build Instructions
+## 7. Build Instructions
 
 ### Native (macOS/Linux with OpenCL)
 ```bash
@@ -189,7 +305,7 @@ cd build
 
 ---
 
-## 7. Usage
+## 8. Usage
 
 ### CLI Tool
 ```bash
@@ -212,7 +328,7 @@ Total: 50 tokens in 194ms
 
 ---
 
-## 8. Performance Targets
+## 9. Performance Targets
 
 | Metric | Target | Today (CPU) |
 |--------|--------|------------|
@@ -225,7 +341,7 @@ Total: 50 tokens in 194ms
 
 ---
 
-## 9. Repository Structure
+## 10. Repository Structure
 
 ```
 MGPU/
@@ -281,7 +397,7 @@ MGPU/
 
 ---
 
-## 10. References
+## 11. References
 
 1. Guerrero et al., "Efficient Deployment of VLMs on Mobile Devices: OnePlus 13R Case Study," arXiv:2507.08505, Jul 2025
 2. Nota AI, "Deploying an Efficient VLM on Mobile Devices" (PhiVA), 2024

@@ -22,3 +22,10 @@
 381	430	1771630782202708000	libmgpu_engine.a	d8e82b1f1a82edd1
 3	480	1771630782250690006	CMakeFiles/mgpu.dir/jni_wrapper.cpp.o	6c7b14d0a18766e9
 480	586	1771630782353693723	/Users/dhikshithreddy/Developer/MGPU/android/app/build/intermediates/cxx/Debug/246m2n5u/obj/arm64-v8a/libmgpu.so	1534db5ec84626eb
+4	220	1771632198732881476	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/engine/pipeline.cpp.o	afb535f65d4eca9b
+221	297	1771632198811858000	libmgpu_engine.a	d8e82b1f1a82edd1
+297	426	1771632198936678610	/Users/dhikshithreddy/Developer/MGPU/android/app/build/intermediates/cxx/Debug/246m2n5u/obj/arm64-v8a/libmgpu.so	1534db5ec84626eb
+0	256	1771632734150712905	CMakeFiles/mgpu_engine.dir/Users/dhikshithreddy/Developer/MGPU/src/models/moondream2.cpp.o	3459a027f22080c9
+1	301	1771632734196576663	CMakeFiles/mgpu.dir/jni_wrapper.cpp.o	6c7b14d0a18766e9
+257	316	1771632734214673000	libmgpu_engine.a	d8e82b1f1a82edd1
+316	419	1771632734312110542	/Users/dhikshithreddy/Developer/MGPU/android/app/build/intermediates/cxx/Debug/246m2n5u/obj/arm64-v8a/libmgpu.so	1534db5ec84626eb
