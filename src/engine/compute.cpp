@@ -509,6 +509,147 @@ cl_event dispatch_patch_embed(const DeviceInfo* dev, cl_program program,
     return event;
 }
 
+// --- Vision RMSNorm ---
+
+cl_event dispatch_vision_rmsnorm(const DeviceInfo* dev, cl_program program,
+                                 cl_mem input, cl_mem output, cl_mem weight,
+                                 int num_patches, int hidden_dim, float eps) {
+    cl_int err;
+    cl_kernel kernel = clCreateKernel(program, "vision_rmsnorm", &err);
+    CL_CHECK_NULL(err);
+
+    err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &input);
+    err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &output);
+    err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &weight);
+    err |= clSetKernelArg(kernel, 3, sizeof(int), &num_patches);
+    err |= clSetKernelArg(kernel, 4, sizeof(int), &hidden_dim);
+    err |= clSetKernelArg(kernel, 5, sizeof(float), &eps);
+    if (err != CL_SUCCESS) {
+        MGPU_ERR("vision_rmsnorm: failed to set kernel args (err=%d)\n", err);
+        clReleaseKernel(kernel);
+        return nullptr;
+    }
+
+    size_t hidden4 = ((size_t)hidden_dim + 3) / 4;
+    size_t global[2] = { (size_t)num_patches, hidden4 };
+
+    cl_event event;
+    err = clEnqueueNDRangeKernel(dev->queue, kernel, 2, nullptr,
+                                 global, nullptr, 0, nullptr, &event);
+    clReleaseKernel(kernel);
+    CL_CHECK_NULL(err);
+    return event;
+}
+
+// --- Vision Attention ---
+
+cl_event dispatch_vision_attention(const DeviceInfo* dev, cl_program program,
+                                    cl_mem input, cl_mem qkv_weight,
+                                    cl_mem qkv_bias, cl_mem out_weight,
+                                    cl_mem out_bias, cl_mem output,
+                                    int num_patches, int hidden_dim,
+                                    int num_heads, float scale) {
+    cl_int err;
+    cl_kernel kernel = clCreateKernel(program, "vision_attention", &err);
+    CL_CHECK_NULL(err);
+
+    err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &input);
+    err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &qkv_weight);
+    err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &qkv_bias);
+    err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &out_weight);
+    err |= clSetKernelArg(kernel, 4, sizeof(cl_mem), &out_bias);
+    err |= clSetKernelArg(kernel, 5, sizeof(cl_mem), &output);
+    err |= clSetKernelArg(kernel, 6, sizeof(int), &num_patches);
+    err |= clSetKernelArg(kernel, 7, sizeof(int), &hidden_dim);
+    err |= clSetKernelArg(kernel, 8, sizeof(int), &num_heads);
+    err |= clSetKernelArg(kernel, 9, sizeof(float), &scale);
+    if (err != CL_SUCCESS) {
+        MGPU_ERR("vision_attention: failed to set kernel args (err=%d)\n", err);
+        clReleaseKernel(kernel);
+        return nullptr;
+    }
+
+    size_t hidden4 = ((size_t)hidden_dim + 3) / 4;
+    size_t global[2] = { (size_t)num_patches, hidden4 };
+
+    cl_event event;
+    err = clEnqueueNDRangeKernel(dev->queue, kernel, 2, nullptr,
+                                 global, nullptr, 0, nullptr, &event);
+    clReleaseKernel(kernel);
+    CL_CHECK_NULL(err);
+    return event;
+}
+
+// --- Vision MLP ---
+
+cl_event dispatch_vision_mlp(const DeviceInfo* dev, cl_program program,
+                              cl_mem input, cl_mem gate_weight,
+                              cl_mem up_weight, cl_mem down_weight,
+                              cl_mem output,
+                              int num_patches, int hidden_dim, int intermediate) {
+    cl_int err;
+    cl_kernel kernel = clCreateKernel(program, "vision_mlp", &err);
+    CL_CHECK_NULL(err);
+
+    err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &input);
+    err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &gate_weight);
+    err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &up_weight);
+    err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &down_weight);
+    err |= clSetKernelArg(kernel, 4, sizeof(cl_mem), &output);
+    err |= clSetKernelArg(kernel, 5, sizeof(int), &num_patches);
+    err |= clSetKernelArg(kernel, 6, sizeof(int), &hidden_dim);
+    err |= clSetKernelArg(kernel, 7, sizeof(int), &intermediate);
+    if (err != CL_SUCCESS) {
+        MGPU_ERR("vision_mlp: failed to set kernel args (err=%d)\n", err);
+        clReleaseKernel(kernel);
+        return nullptr;
+    }
+
+    size_t hidden4 = ((size_t)hidden_dim + 3) / 4;
+    size_t global[2] = { (size_t)num_patches, hidden4 };
+
+    cl_event event;
+    err = clEnqueueNDRangeKernel(dev->queue, kernel, 2, nullptr,
+                                 global, nullptr, 0, nullptr, &event);
+    clReleaseKernel(kernel);
+    CL_CHECK_NULL(err);
+    return event;
+}
+
+// --- Vision Projection ---
+
+cl_event dispatch_vision_proj(const DeviceInfo* dev, cl_program program,
+                              cl_mem visual_tokens, cl_mem proj_weight,
+                              cl_mem proj_bias, cl_mem output,
+                              int num_patches, int vision_dim, int llm_dim) {
+    cl_int err;
+    cl_kernel kernel = clCreateKernel(program, "vision_proj", &err);
+    CL_CHECK_NULL(err);
+
+    err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &visual_tokens);
+    err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &proj_weight);
+    err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &proj_bias);
+    err |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &output);
+    err |= clSetKernelArg(kernel, 4, sizeof(int), &num_patches);
+    err |= clSetKernelArg(kernel, 5, sizeof(int), &vision_dim);
+    err |= clSetKernelArg(kernel, 6, sizeof(int), &llm_dim);
+    if (err != CL_SUCCESS) {
+        MGPU_ERR("vision_proj: failed to set kernel args (err=%d)\n", err);
+        clReleaseKernel(kernel);
+        return nullptr;
+    }
+
+    size_t llm4 = ((size_t)llm_dim + 3) / 4;
+    size_t global[2] = { (size_t)num_patches, llm4 };
+
+    cl_event event;
+    err = clEnqueueNDRangeKernel(dev->queue, kernel, 2, nullptr,
+                                 global, nullptr, 0, nullptr, &event);
+    clReleaseKernel(kernel);
+    CL_CHECK_NULL(err);
+    return event;
+}
+
 // --- Vector Add ---
 
 cl_event dispatch_vector_add(const DeviceInfo* dev, cl_program program,

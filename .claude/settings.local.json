@@ -9,7 +9,13 @@
       "Bash(cmake:*)",
       "Bash(make:*)",
       "Bash(export:*)",
-      "Bash(./test_gguf:*)"
+      "Bash(./test_gguf:*)",
+      "Bash(awk:*)",
+      "Bash(ctest:*)",
+      "Bash(ldd:*)",
+      "Bash(otool:*)",
+      "Bash(ls:*)",
+      "Bash(brew list:*)"
     ]
   }
 }

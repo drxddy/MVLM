@@ -104,6 +104,32 @@ cl_event dispatch_patch_embed(const DeviceInfo* dev, cl_program program,
                               int C, int H, int W,
                               int patch_h, int patch_w, int embed_dim);
 
+// Vision encoder layer: RMSNorm
+cl_event dispatch_vision_rmsnorm(const DeviceInfo* dev, cl_program program,
+                                  cl_mem input, cl_mem output, cl_mem weight,
+                                  int num_patches, int hidden_dim, float eps);
+
+// Vision encoder layer: Attention (QKV + output projection)
+cl_event dispatch_vision_attention(const DeviceInfo* dev, cl_program program,
+                                    cl_mem input, cl_mem qkv_weight,
+                                    cl_mem qkv_bias, cl_mem out_weight,
+                                    cl_mem out_bias, cl_mem output,
+                                    int num_patches, int hidden_dim,
+                                    int num_heads, float scale);
+
+// Vision encoder layer: MLP (SwiGLU)
+cl_event dispatch_vision_mlp(const DeviceInfo* dev, cl_program program,
+                              cl_mem input, cl_mem gate_weight,
+                              cl_mem up_weight, cl_mem down_weight,
+                              cl_mem output,
+                              int num_patches, int hidden_dim, int intermediate);
+
+// Vision-to-language projection
+cl_event dispatch_vision_proj(const DeviceInfo* dev, cl_program program,
+                              cl_mem visual_tokens, cl_mem proj_weight,
+                              cl_mem proj_bias, cl_mem output,
+                              int num_patches, int vision_dim, int llm_dim);
+
 // Element-wise vector addition: output = a + b
 cl_event dispatch_vector_add(const DeviceInfo* dev, cl_program program,
                              cl_mem a, cl_mem b, cl_mem output, int n);
