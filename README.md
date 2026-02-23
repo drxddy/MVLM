@@ -1,12 +1,6 @@
 
 ## MVLM: Real-Time VLM on Mobile via Custom OpenCL Inference Engine
 
-**Status:** Phase 5 In Progress — Text pipeline wired, Vision encoder & optimizations remaining
-**Date:** February 2026
-**Target:** Snapdragon 8 Gen 3 / 8 Elite (Adreno A7x GPUs)
-
----
-
 ## 1. The Problem
 
 Mobile VLMs are broken. Every framework (llama.cpp, MLC, mllm) either runs CPU-only or crashes trying to use the GPU.
